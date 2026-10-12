@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc; /* Tailwind slate-50 */
+  --foreground: #0f172a; /* Tailwind slate-900 */
+  --sidebar-bg: #1e293b; /* Tailwind slate-800 */
+  --sidebar-fg: #f1f5f9; /* Tailwind slate-100 */
+  --panel-bg: #ffffff;   /* Pure white */
+  --panel-border: #e2e8f0; /* Tailwind slate-200 */
+  --accent: #2563eb;     /* Tailwind blue-600 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-panel: var(--panel-bg);
+  --color-border-subtle: var(--panel-border);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Force light mode strictly per user's choice */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  height: 100vh;
+  overflow: hidden;
+}
