@@ -6,9 +6,6 @@ from datetime import datetime
 # REST Schemas
 # ==========================================
 
-class MeetingCreate(BaseModel):
-    title: str = Field(..., description="Title of the meeting")
-
 class ActionItem(BaseModel):
     id: str
     title: str
@@ -34,12 +31,53 @@ class TranscriptSegment(BaseModel):
     timestamp: str
     is_final: bool = True
 
+class MeetingCreate(BaseModel):
+    title: str = Field(..., description="Title of the meeting")
+    agenda: List[str] = []
+
 class MeetingSummary(BaseModel):
     meeting_id: str
     title: str
     summary: str
     key_points: List[str] = []
     action_items: List[ActionItem] = []
+
+class SpeakerStat(BaseModel):
+    speaker: str
+    segment_count: int
+    word_count: int
+    talk_time_seconds: int
+    talk_time_percentage: float
+
+class MeetingInsights(BaseModel):
+    meeting_id: str
+    total_duration_estimate: str
+    total_words: int
+    speakers: List[SpeakerStat] = []
+    sentiment: Literal["positive", "collaborative", "neutral", "urgent", "mixed"] = "collaborative"
+    key_topics: List[str] = []
+    engagement_score: int = 85
+
+class AgendaItem(BaseModel):
+    topic: str
+    covered: bool
+    mentioned_at: Optional[str] = None
+
+class AgendaCreate(BaseModel):
+    agenda: List[str]
+
+class AgendaCheckResponse(BaseModel):
+    meeting_id: str
+    total_agenda_items: int
+    completed_items: int
+    items: List[AgendaItem]
+
+class AudioUploadResponse(BaseModel):
+    meeting_id: str
+    filename: str
+    segments_added: int
+    action_items_detected: int
+    transcript: List[TranscriptSegment]
 
 class Meeting(BaseModel):
     id: str
@@ -49,6 +87,7 @@ class Meeting(BaseModel):
     segments: List[TranscriptSegment] = []
     action_items: List[ActionItem] = []
     summary: Optional[str] = None
+    agenda: List[str] = []
 
 # ==========================================
 # WebSocket Message Schemas

@@ -1,6 +1,7 @@
+import base64
 import uuid
 from typing import List, Dict, Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import PlainTextResponse
 from app.models.schemas import (
     Meeting,
@@ -9,10 +10,15 @@ from app.models.schemas import (
     ActionItem,
     ActionItemCreate,
     ActionItemUpdate,
-    TranscriptSegment
+    TranscriptSegment,
+    MeetingInsights,
+    AgendaCreate,
+    AgendaCheckResponse,
+    AudioUploadResponse
 )
 from app.api.websocket import manager
 from app.services.copilot import copilot_service
+from app.services.stt import stt_service
 
 router = APIRouter(prefix="/api", tags=["Meetings"])
 
@@ -21,7 +27,8 @@ meetings_db: Dict[str, Meeting] = {
     "default_sync": Meeting(
         id="default_sync",
         title="Weekly Strategy Sync",
-        status="active"
+        status="active",
+        agenda=["Review Q4 roadmap", "Supply chain status", "Vendor deep dive"]
     )
 }
 
@@ -39,7 +46,8 @@ async def create_meeting(payload: MeetingCreate):
     new_meeting = Meeting(
         id=meeting_id,
         title=payload.title,
-        status="active"
+        status="active",
+        agenda=payload.agenda
     )
     meetings_db[meeting_id] = new_meeting
     return new_meeting
@@ -146,7 +154,6 @@ async def update_action_item(meeting_id: str, item_id: str, payload: ActionItemU
             break
 
     if not target_action:
-        # Also check meeting.action_items
         for act in meeting.action_items:
             if act.id == item_id:
                 if payload.title is not None:
@@ -199,6 +206,95 @@ async def end_meeting(meeting_id: str):
     await manager.broadcast_to_meeting(meeting_id, summary_msg)
     
     return summary
+
+# ==========================================
+# Analytics & Insights
+# ==========================================
+
+@router.get("/meetings/{meeting_id}/insights", response_model=MeetingInsights)
+async def get_meeting_insights(meeting_id: str):
+    meeting = meetings_db.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    segments = manager.meeting_history.get(meeting_id, [])
+    if not segments and meeting.segments:
+        segments = [s.model_dump() for s in meeting.segments]
+
+    return await copilot_service.calculate_insights(meeting_id, segments)
+
+# ==========================================
+# Agenda Management & Real-time Tracker
+# ==========================================
+
+@router.post("/meetings/{meeting_id}/agenda", response_model=AgendaCheckResponse)
+async def set_meeting_agenda(meeting_id: str, payload: AgendaCreate):
+    meeting = meetings_db.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    meeting.agenda = payload.agenda
+    segments = manager.meeting_history.get(meeting_id, [])
+    if not segments and meeting.segments:
+        segments = [s.model_dump() for s in meeting.segments]
+
+    return await copilot_service.check_agenda(meeting_id, meeting.agenda, segments)
+
+@router.get("/meetings/{meeting_id}/agenda", response_model=AgendaCheckResponse)
+async def check_meeting_agenda(meeting_id: str):
+    meeting = meetings_db.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    segments = manager.meeting_history.get(meeting_id, [])
+    if not segments and meeting.segments:
+        segments = [s.model_dump() for s in meeting.segments]
+
+    return await copilot_service.check_agenda(meeting_id, meeting.agenda, segments)
+
+# ==========================================
+# Audio File Upload & Batch Transcription
+# ==========================================
+
+@router.post("/meetings/{meeting_id}/upload-audio", response_model=AudioUploadResponse)
+async def upload_meeting_audio(meeting_id: str, file: UploadFile = File(...)):
+    meeting = meetings_db.get(meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    content = await file.read()
+    b64_data = base64.b64encode(content).decode("utf-8")
+
+    if meeting_id not in manager.meeting_history:
+        manager.meeting_history[meeting_id] = []
+    if meeting_id not in manager.meeting_actions:
+        manager.meeting_actions[meeting_id] = []
+
+    # Process audio chunk / simulate transcription segments
+    new_segments: List[TranscriptSegment] = []
+    detected_actions = 0
+
+    # Simulate 3 sequential chunks from the audio file
+    for i in range(1, 4):
+        time_str = f"0{i}:00"
+        seg = await stt_service.transcribe_chunk(b64_data, current_time_str=time_str)
+        if seg:
+            manager.meeting_history[meeting_id].append(seg.model_dump())
+            new_segments.append(seg)
+            
+            # Check for action item
+            action = await copilot_service.detect_action_item(seg.text, seg.speaker)
+            if action:
+                manager.meeting_actions[meeting_id].append(action.model_dump())
+                detected_actions += 1
+
+    return AudioUploadResponse(
+        meeting_id=meeting_id,
+        filename=file.filename or "audio.webm",
+        segments_added=len(new_segments),
+        action_items_detected=detected_actions,
+        transcript=new_segments
+    )
 
 # ==========================================
 # Export Meeting Notes

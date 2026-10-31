@@ -2,9 +2,18 @@ import json
 import logging
 import uuid
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
+from collections import Counter
 import httpx
-from app.models.schemas import WSCopilotResponse, ActionItem, MeetingSummary
+from app.models.schemas import (
+    WSCopilotResponse,
+    ActionItem,
+    MeetingSummary,
+    MeetingInsights,
+    SpeakerStat,
+    AgendaItem,
+    AgendaCheckResponse
+)
 from app.core.config import settings
 
 logger = logging.getLogger("meeting-copilot.copilot")
@@ -126,7 +135,6 @@ class CopilotService:
         trigger_keywords = ["schedule", "follow up", "will do", "need to", "action item", "todo", "assign", "prepare", "review"]
         
         if any(keyword in lowered for keyword in trigger_keywords):
-            # Parse possible deadline
             due_date = "Next Sync"
             if "tomorrow" in lowered:
                 due_date = "Tomorrow"
@@ -138,7 +146,6 @@ class CopilotService:
             elif "by friday" in lowered or "friday" in lowered:
                 due_date = "Friday EOD"
 
-            # Derive title
             cleaned_title = text.strip()
             if len(cleaned_title) > 60:
                 cleaned_title = cleaned_title[:57] + "..."
@@ -180,7 +187,6 @@ class CopilotService:
                     if resp.status_code == 200:
                         data = resp.json()
                         raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        # Extract JSON from response
                         json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
                         if json_match:
                             parsed = json.loads(json_match.group(0))
@@ -251,6 +257,123 @@ class CopilotService:
             summary=f"Strategic sync on '{title}' focusing on roadmap execution, key deliverables, and cross-team alignment.",
             key_points=key_points,
             action_items=action_items
+        )
+
+    async def calculate_insights(self, meeting_id: str, segments: List[dict]) -> MeetingInsights:
+        """
+        Analyzes meeting participation, speech distribution, sentiment, and key topics.
+        """
+        if not segments:
+            return MeetingInsights(
+                meeting_id=meeting_id,
+                total_duration_estimate="00:00",
+                total_words=0,
+                speakers=[],
+                sentiment="neutral",
+                key_topics=[],
+                engagement_score=50
+            )
+
+        speaker_counts: Dict[str, int] = Counter()
+        speaker_words: Dict[str, int] = Counter()
+        all_words: List[str] = []
+
+        stop_words = {
+            "the", "a", "an", "and", "or", "to", "in", "for", "of", "with", "at", "by", "from",
+            "is", "are", "was", "were", "we", "i", "you", "they", "it", "that", "this", "on", "our"
+        }
+
+        for s in segments:
+            speaker = s.get("speaker", "Speaker")
+            text = s.get("text", "")
+            words = [w.lower() for w in re.findall(r"\b[a-zA-Z]{3,}\b", text)]
+            speaker_counts[speaker] += 1
+            speaker_words[speaker] += len(words)
+            all_words.extend([w for w in words if w not in stop_words])
+
+        total_words = sum(speaker_words.values()) or 1
+        speaker_stats: List[SpeakerStat] = []
+
+        for speaker, seg_count in speaker_counts.items():
+            words_count = speaker_words[speaker]
+            percentage = round((words_count / total_words) * 100, 1)
+            # Estimate speaking time: ~130 words per minute -> ~2.16 words per second
+            talk_seconds = int(words_count / 2.16) if words_count > 0 else seg_count * 5
+            speaker_stats.append(SpeakerStat(
+                speaker=speaker,
+                segment_count=seg_count,
+                word_count=words_count,
+                talk_time_seconds=talk_seconds,
+                talk_time_percentage=percentage
+            ))
+
+        # Sort speakers by talk time descending
+        speaker_stats.sort(key=lambda s: s.talk_time_percentage, reverse=True)
+
+        # Most common topics (keywords)
+        top_keywords = [w.capitalize() for w, _ in Counter(all_words).most_common(5)]
+        if not top_keywords:
+            top_keywords = ["Strategy", "Roadmap", "Integration", "Logistics"]
+
+        # Calculate estimated duration
+        total_seconds = sum(s.talk_time_seconds for s in speaker_stats)
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        duration_str = f"{minutes:02d}:{seconds:02d}"
+
+        # Sentiment heuristics
+        full_text = " ".join(s.get("text", "") for s in segments).lower()
+        if any(w in full_text for w in ["bottleneck", "delay", "challenges", "urgent", "contingency"]):
+            sentiment = "collaborative" if "agree" in full_text or "schedule" in full_text else "urgent"
+        elif any(w in full_text for w in ["great", "excellent", "progressing", "welcome"]):
+            sentiment = "positive"
+        else:
+            sentiment = "collaborative"
+
+        # Engagement score based on balanced participation
+        max_pct = max((s.talk_time_percentage for s in speaker_stats), default=100)
+        engagement = max(60, min(95, int(100 - (max_pct - 35))))
+
+        return MeetingInsights(
+            meeting_id=meeting_id,
+            total_duration_estimate=duration_str,
+            total_words=total_words,
+            speakers=speaker_stats,
+            sentiment=sentiment,
+            key_topics=top_keywords,
+            engagement_score=engagement
+        )
+
+    async def check_agenda(self, meeting_id: str, agenda_topics: List[str], segments: List[dict]) -> AgendaCheckResponse:
+        """
+        Compares predefined agenda topics against meeting transcript to identify covered topics.
+        """
+        items: List[AgendaItem] = []
+        full_text_entries = [(s.get("timestamp", "00:00"), s.get("text", "").lower()) for s in segments]
+
+        for topic in agenda_topics:
+            topic_words = [w.lower() for w in re.findall(r"\b[a-zA-Z]{3,}\b", topic)]
+            covered = False
+            mentioned_at = None
+
+            for timestamp, seg_text in full_text_entries:
+                if any(w in seg_text for w in topic_words):
+                    covered = True
+                    mentioned_at = timestamp
+                    break
+
+            items.append(AgendaItem(
+                topic=topic,
+                covered=covered,
+                mentioned_at=mentioned_at
+            ))
+
+        completed_count = sum(1 for i in items if i.covered)
+        return AgendaCheckResponse(
+            meeting_id=meeting_id,
+            total_agenda_items=len(agenda_topics),
+            completed_items=completed_count,
+            items=items
         )
 
 copilot_service = CopilotService()

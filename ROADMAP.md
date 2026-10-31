@@ -68,13 +68,13 @@ gantt
 ---
 
 ### 📝 Phase 4: Automated Summarization & Action Item Engine
-- [ ] **Meeting Summarizer Service**
+- [x] **Meeting Summarizer Service**
   - Generate structured executive summaries with key topics and decisions.
-- [ ] **Action Item Extractor**
+- [x] **Action Item Extractor**
   - Detect action items, assignees, priorities, and deadlines automatically.
-  - Provide inline editing and manual override for action items.
-- [ ] **Post-Meeting Insights**
-  - Add topic breakdown, speaker participation metrics, and sentiment analysis.
+  - Provide inline editing and manual override for action items (REST API endpoints).
+- [x] **Post-Meeting Insights & Analytics**
+  - Speaker participation metrics, talk time distribution, sentiment analysis, and agenda tracking.
 
 ---
 

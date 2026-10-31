@@ -1,3 +1,4 @@
+import io
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
@@ -13,13 +14,14 @@ def test_health_check():
 
 def test_create_and_get_meeting():
     # 1. Create Meeting
-    payload = {"title": "Q4 Roadmap Brainstorm"}
+    payload = {"title": "Q4 Roadmap Brainstorm", "agenda": ["Roadmap", "Budget"]}
     res = client.post("/api/meetings", json=payload)
     assert res.status_code == 200
     meeting_data = res.json()
     meeting_id = meeting_data["id"]
     assert meeting_data["title"] == "Q4 Roadmap Brainstorm"
     assert meeting_data["status"] == "active"
+    assert "Roadmap" in meeting_data["agenda"]
 
     # 2. Get Meeting
     get_res = client.get(f"/api/meetings/{meeting_id}")
@@ -59,6 +61,42 @@ def test_action_items_workflow():
     assert patch_res.status_code == 200
     assert patch_res.json()["status"] == "completed"
 
+def test_insights_and_agenda():
+    res = client.post("/api/meetings", json={
+        "title": "Strategy & Insights Sync",
+        "agenda": ["Supply chain", "Unrelated Topic"]
+    })
+    meeting_id = res.json()["id"]
+
+    # 1. Test agenda tracking
+    agenda_res = client.get(f"/api/meetings/{meeting_id}/agenda")
+    assert agenda_res.status_code == 200
+    agenda_data = agenda_res.json()
+    assert agenda_data["total_agenda_items"] == 2
+
+    # 2. Test insights
+    insights_res = client.get(f"/api/meetings/{meeting_id}/insights")
+    assert insights_res.status_code == 200
+    insights_data = insights_res.json()
+    assert insights_data["meeting_id"] == meeting_id
+    assert "sentiment" in insights_data
+    assert "engagement_score" in insights_data
+
+def test_audio_upload():
+    res = client.post("/api/meetings", json={"title": "Audio Upload Sync"})
+    meeting_id = res.json()["id"]
+
+    fake_audio_file = io.BytesIO(b"RIFF....WAVEfmt ....data....")
+    upload_res = client.post(
+        f"/api/meetings/{meeting_id}/upload-audio",
+        files={"file": ("test_recording.wav", fake_audio_file, "audio/wav")}
+    )
+    assert upload_res.status_code == 200
+    upload_data = upload_res.json()
+    assert upload_data["meeting_id"] == meeting_id
+    assert upload_data["segments_added"] > 0
+    assert len(upload_data["transcript"]) > 0
+
 def test_end_meeting_and_export():
     res = client.post("/api/meetings", json={"title": "Sprint Planning Session"})
     meeting_id = res.json()["id"]
@@ -80,4 +118,3 @@ def test_end_meeting_and_export():
     # Delete Meeting
     del_res = client.delete(f"/api/meetings/{meeting_id}")
     assert del_res.status_code == 200
-
