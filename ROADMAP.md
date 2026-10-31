@@ -28,14 +28,14 @@ gantt
 
 ## 🎯 Detailed Milestone Plan
 
-### 🚀 Phase 1: Core Foundation & Architecture (Current Phase)
-- [ ] **Frontend Initialization**
+### 🚀 Phase 1: Core Foundation & Architecture
+- [x] **Frontend Initialization**
   - Set up Next.js (App Router, TypeScript) with dark mode glassmorphism UI.
   - Build UI layout shell: Sidebar, Header, Active Meeting view, Dashboard.
-- [ ] **Backend Scaffolding**
+- [x] **Backend Scaffolding**
   - Initialize FastAPI project with async standard structure.
   - Configure CORS, environment settings, and logging handlers.
-- [ ] **Data Models & Schemas**
+- [x] **Data Models & Schemas**
   - Define Pydantic models for `Meeting`, `TranscriptSegment`, `ActionItem`, `Summary`.
 
 ---
@@ -44,25 +44,26 @@ gantt
 - [ ] **Browser Audio Capture**
   - Build `useAudioRecorder` hook using Web Audio API & MediaRecorder.
   - Implement real-time audio chunking (PCM / WebM format).
-- [ ] **WebSocket Streaming Core**
+- [x] **WebSocket Streaming Core**
   - Establish persistent WebSocket connection between Client and FastAPI.
   - Add connection management, heartbeat, and reconnection logic.
-- [ ] **Speech-to-Text (STT) Integration**
-  - Connect STT engine (Deepgram / OpenAI Whisper) for live transcription.
+- [x] **Speech-to-Text (STT) Integration**
+  - Connect STT engine (Deepgram / OpenAI Whisper) with fallback mock transcription.
   - Stream transcript chunks with timestamps back to the frontend feed.
-- [ ] **Speaker Diarization**
+- [x] **Speaker Diarization**
   - Identify and separate different speakers in real-time or post-chunk processing.
 
 ---
 
 ### 🤖 Phase 3: In-Meeting AI Copilot & Real-Time Assistance
-- [ ] **Context Manager Service**
+- [x] **Context Manager Service**
   - Implement rolling transcript buffer to feed LLM context window.
 - [ ] **In-Meeting Copilot Chat**
   - Build interactive side panel for asking questions during live meetings.
   - Enable instant answers based on meeting context so far.
-- [ ] **Smart Proactive Nudges**
-  - Auto-suggest follow-up questions or flag unaddressed agenda topics.
+- [x] **Real-time AI Copilot Engine**
+  - Live Q&A answering engine powered by Gemini, OpenAI, or dynamic context search.
+  - Auto-extract action items, assignees, and deadlines.
 
 ---
 
