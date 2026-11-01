@@ -104,7 +104,16 @@ Emitted proactively when an action item is parsed from the conversation.
 }
 ```
 
-#### E. Meeting Summary (Upon meeting end)
+#### E. Proactive Nudge
+Emitted periodically to assist the meeting facilitator with strategic suggestions or agenda warnings.
+```json
+{
+  "type": "proactive_nudge",
+  "nudge": "Ask the team: 'What is the immediate contingency plan if the delay extends by 2 weeks?'"
+}
+```
+
+#### F. Meeting Summary (Upon meeting end)
 ```json
 {
   "type": "meeting_summary",
@@ -127,7 +136,7 @@ Emitted proactively when an action item is parsed from the conversation.
 }
 ```
 
-#### F. Pong / Heartbeat
+#### G. Pong / Heartbeat
 ```json
 {
   "type": "pong"
@@ -142,7 +151,7 @@ Emitted proactively when an action item is parsed from the conversation.
 - **`GET /api/health`**
 - **Response:**
   ```json
-  { "status": "ok", "service": "Meeting Copilot API", "version": "0.1.0" }
+  { "status": "ok", "service": "Meeting Copilot API", "version": "0.1.0", "storage": "persistent_sqlite" }
   ```
 
 ### 2.2 Meetings Management
@@ -173,72 +182,42 @@ Emitted proactively when an action item is parsed from the conversation.
 
 ### 2.4 Analytics & Speaker Insights
 - **`GET /api/meetings/{meeting_id}/insights`**
-  - **Response:**
-    ```json
-    {
-      "meeting_id": "meet_123",
-      "total_duration_estimate": "14:30",
-      "total_words": 1420,
-      "speakers": [
-        {
-          "speaker": "Sarah K.",
-          "segment_count": 12,
-          "word_count": 780,
-          "talk_time_seconds": 361,
-          "talk_time_percentage": 54.9
-        },
-        {
-          "speaker": "Dave R.",
-          "segment_count": 8,
-          "word_count": 410,
-          "talk_time_seconds": 189,
-          "talk_time_percentage": 28.9
-        }
-      ],
-      "sentiment": "collaborative",
-      "key_topics": ["Supply Chain", "Project Gamma", "Logistics"],
-      "engagement_score": 88
-    }
-    ```
+  - **Response:** Speaker talk-time distribution (seconds & percentage), dialogue counts, meeting sentiment, and engagement score.
 
 ### 2.5 Agenda Tracking
 - **`POST /api/meetings/{meeting_id}/agenda`**
   - **Body:** `{ "agenda": ["Q4 Roadmap", "Supply Chain Delays", "Vendor Deep Dive"] }`
-  - **Response:** Agenda status response.
 
 - **`GET /api/meetings/{meeting_id}/agenda`**
-  - **Response:**
-    ```json
-    {
-      "meeting_id": "meet_123",
-      "total_agenda_items": 3,
-      "completed_items": 2,
-      "items": [
-        { "topic": "Q4 Roadmap", "covered": true, "mentioned_at": "00:03" },
-        { "topic": "Supply Chain Delays", "covered": true, "mentioned_at": "00:15" },
-        { "topic": "Vendor Deep Dive", "covered": false, "mentioned_at": null }
-      ]
-    }
-    ```
+  - **Response:** Agenda completion checklist comparing topics against the transcript.
 
-### 2.6 Audio Upload & Batch Transcription
+### 2.6 Proactive Facilitator Nudges
+- **`GET /api/meetings/{meeting_id}/nudges`**
+  - **Response:** List of dynamic suggestions and follow-up questions for the live session.
+
+### 2.7 Cross-Meeting RAG Search & Knowledge Base
+- **`GET /api/search?q={query}`**
+  - Searches historical transcripts across all meetings with relevance scoring and timestamp references.
+
+- **`POST /api/copilot/global-query`**
+  - **Body:** `{ "query": "Across all meetings, what were our main supply chain bottlenecks?" }`
+  - **Response:** Synthesized AI answer referencing historical meeting titles, speakers, and quotes.
+
+### 2.8 Audio Upload & Batch Transcription
 - **`POST /api/meetings/{meeting_id}/upload-audio`**
   - **Request:** `multipart/form-data` with `file: <audio_file>`
-  - **Response:**
-    ```json
-    {
-      "meeting_id": "meet_123",
-      "filename": "team_sync.webm",
-      "segments_added": 3,
-      "action_items_detected": 1,
-      "transcript": [...]
-    }
-    ```
+  - Returns generated transcript segments and automatically detected action items.
 
-### 2.7 Meeting End & Summary
+### 2.9 Meeting End & Summary
 - **`POST /api/meetings/{meeting_id}/end`**
-  - Triggers final AI summary generation, saves meeting state, and broadcasts to WebSocket attendees.
+  - Triggers final AI summary generation, saves meeting state permanently, and broadcasts to WebSocket attendees.
 
-### 2.8 Export Meeting Notes
-- **`GET /api/meetings/{meeting_id}/export?format=markdown|json`**
-  - Returns formatted Markdown document or complete JSON dump suitable for Notion, Slack, and file downloads.
+### 2.10 Multi-Format Export & Integrations
+- **`GET /api/meetings/{meeting_id}/export?format=markdown|json|html`**
+  - `html`: Styled, responsive executive summary dashboard suitable for printing and PDF generation.
+  - `markdown`: Formatted notes ready for Notion/GitHub.
+  - `json`: Complete raw data dump.
+
+- **`POST /api/meetings/{meeting_id}/notify-slack`**
+  - **Body:** `{ "webhook_url": "https://hooks.slack.com/services/..." }`
+  - Dispatches meeting summary and action items to Slack channels using Slack Block Kit formatting.

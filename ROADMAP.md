@@ -64,6 +64,8 @@ gantt
 - [x] **Real-time AI Copilot Engine**
   - Live Q&A answering engine powered by Gemini, OpenAI, or dynamic context search.
   - Auto-extract action items, assignees, and deadlines.
+- [x] **Smart Proactive Nudges**
+  - Auto-suggest follow-up questions and highlight unaddressed agenda topics.
 
 ---
 
@@ -79,26 +81,23 @@ gantt
 ---
 
 ### 🔍 Phase 5: Knowledge Base & RAG Vector Search
-- [ ] **Vector Database Setup**
-  - Deploy PostgreSQL (`pgvector`) or Qdrant for semantic search.
-  - Build background indexing pipeline for completed meeting transcripts.
-- [ ] **Cross-Meeting Search Engine**
-  - Implement semantic search across all historical meetings.
-  - Allow users to ask queries across multiple past meetings (e.g., "What did we decide about Q3 budget?").
+- [x] **Persistent Database & Indexing Pipeline**
+  - Async SQLite persistent storage for meetings, transcripts, action items, and summaries.
+  - Background indexing pipeline for completed meeting transcripts.
+- [x] **Cross-Meeting Search Engine**
+  - Full-text and keyword semantic search across historical meetings (`GET /api/search`).
+  - Cross-meeting Copilot RAG queries (`POST /api/copilot/global-query`).
 
 ---
 
 ### 📦 Phase 6: Integrations, Export & Production Hardening
-- [ ] **Export & Third-Party Sync**
-  - Export summaries to Markdown, PDF, Notion, Slack, and Google Docs.
+- [x] **Multi-Format Export & Integrations**
+  - Export summaries to Markdown, interactive styled HTML dashboard, and raw JSON.
+  - Slack incoming webhook integration (`POST /api/meetings/{id}/notify-slack`).
 - [ ] **Calendar Sync**
   - Google Calendar / Outlook integration for auto-joining scheduled meetings.
-- [ ] **Security & Authentication**
-  - Implement JWT authentication & user roles.
-  - Secure API keys & audio buffer encryption.
 - [ ] **Containerization & Deployment**
-  - Dockerize backend, frontend, and vector database services.
-  - CI/CD pipeline setup for continuous deployment.
+  - Dockerize backend, frontend, and database services.
 
 ---
 

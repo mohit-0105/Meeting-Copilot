@@ -23,3 +23,8 @@ venv.bak/
 # Testing & Logs
 .pytest_cache/
 *.log
+
+# Databases & local storage
+data/
+*.db
+*.sqlite3

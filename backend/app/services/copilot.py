@@ -376,4 +376,111 @@ class CopilotService:
             items=items
         )
 
+    async def generate_nudges(self, meeting_id: str, segments: List[dict], agenda: List[str]) -> List[str]:
+        """
+        Generates smart proactive suggestions / follow-up questions for the meeting facilitator.
+        """
+        if not segments:
+            return ["Review agenda topics to begin the meeting effectively."]
+
+        last_texts = " ".join([s.get("text", "") for s in segments[-4:]]).lower()
+        nudges = []
+
+        if "delay" in last_texts or "bottleneck" in last_texts or "challenge" in last_texts:
+            nudges.append("Ask the team: 'What is the immediate contingency plan if the delay extends by 2 weeks?'")
+        if "budget" in last_texts or "vendor" in last_texts or "quote" in last_texts:
+            nudges.append("Clarify: 'Who has final budget sign-off for the vendor choice?'")
+        if "tomorrow" in last_texts or "schedule" in last_texts:
+            nudges.append("Confirm: 'Has a calendar invite been sent to all essential stakeholders?'")
+        
+        # Check unaddressed agenda
+        if agenda:
+            for item in agenda[:2]:
+                if not any(word in last_texts for word in item.lower().split() if len(word) > 3):
+                    nudges.append(f"Agenda Reminder: Ensure '{item}' is addressed before concluding.")
+
+        if not nudges:
+            nudges = [
+                "Prompt quiet participants for input on the current proposal.",
+                "Verify if the current timeline aligns with product launch goals."
+            ]
+        return nudges[:3]
+
+    def export_html(self, meeting_title: str, meeting_id: str, summary_text: str, key_points: List[str], action_items: List[ActionItem], segments: List[dict]) -> str:
+        """
+        Renders a stunning modern HTML executive summary dashboard.
+        """
+        actions_html = "".join([
+            f"<li style='margin-bottom:8px;'><input type='checkbox' {'checked' if a.status=='completed' else ''} disabled/> "
+            f"<strong>{a.title}</strong> — <em>@{a.assignee}</em> (Due: {a.due_date or 'TBD'})</li>"
+            for a in action_items
+        ]) or "<li><em>No action items recorded.</em></li>"
+
+        points_html = "".join([f"<li style='margin-bottom:6px;'>{kp}</li>" for kp in key_points])
+
+        segments_html = "".join([
+            f"<tr><td style='padding:8px; border-bottom:1px solid #e2e8f0; color:#64748b; font-family:monospace; width:80px;'>{s.get('timestamp','00:00')}</td>"
+            f"<td style='padding:8px; border-bottom:1px solid #e2e8f0; font-weight:600; color:#2563eb; width:120px;'>{s.get('speaker','Speaker')}</td>"
+            f"<td style='padding:8px; border-bottom:1px solid #e2e8f0; color:#1e293b;'>{s.get('text','')}</td></tr>"
+            for s in segments
+        ]) or "<tr><td colspan='3' style='padding:12px; text-align:center;'>No transcript lines recorded.</td></tr>"
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Meeting Copilot — {meeting_title}</title>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #0f172a; margin: 0; padding: 40px; }}
+        .container {{ max-width: 900px; margin: 0 auto; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); padding: 40px; border: 1px solid #e2e8f0; }}
+        .header {{ border-bottom: 2px solid #f1f5f9; padding-bottom: 24px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }}
+        .badge {{ background: #eff6ff; color: #1d4ed8; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }}
+        h1 {{ margin: 0 0 6px 0; font-size: 26px; }}
+        h2 {{ font-size: 18px; color: #334155; margin-top: 28px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }}
+        .summary-box {{ background: #f8fafc; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 4px; font-size: 15px; line-height: 1.6; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+        ul {{ padding-left: 20px; line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>📋 {meeting_title}</h1>
+                <div style="color: #64748b; font-size: 14px;">Meeting ID: <code>{meeting_id}</code></div>
+            </div>
+            <div class="badge">Completed • AI Summary</div>
+        </div>
+        <h2>📝 Executive Summary</h2>
+        <div class="summary-box">{summary_text}</div>
+        <h2>💡 Key Decisions & Points</h2>
+        <ul>{points_html}</ul>
+        <h2>✅ Action Items</h2>
+        <ul style="list-style: none; padding-left: 0;">{actions_html}</ul>
+        <h2>🎙️ Transcript Log</h2>
+        <table>{segments_html}</table>
+    </div>
+</body>
+</html>"""
+
+    def format_slack_blocks(self, meeting_title: str, summary_text: str, action_items: List[ActionItem]) -> dict:
+        """Formats meeting recap for Slack Incoming Webhooks."""
+        actions_text = "\n".join([f"• {'[x]' if a.status=='completed' else '[ ]'} *{a.title}* (@{a.assignee})" for a in action_items]) or "_No actions_"
+        return {
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": f"📋 Meeting Summary: {meeting_title}"}
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Executive Summary:*\n{summary_text}"}
+                },
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": f"*Action Items:*\n{actions_text}"}
+                }
+            ]
+        }
+
 copilot_service = CopilotService()

@@ -71,6 +71,48 @@ export interface AgendaItem {
   mentioned_at?: string; // e.g. "00:15"
 }
 
+export interface AgendaCheckResponse {
+  meeting_id: string;
+  total_agenda_items: number;
+  completed_items: number;
+  items: AgendaItem[];
+}
+
+export interface NudgesResponse {
+  meeting_id: string;
+  nudges: string[];
+}
+
+export interface RAGSource {
+  meeting_id: string;
+  meeting_title: string;
+  timestamp: string;
+  speaker: string;
+  text: string;
+}
+
+export interface RAGQueryRequest {
+  query: string;
+}
+
+export interface RAGQueryResponse {
+  query: string;
+  answer: string;
+  sources: RAGSource[];
+}
+
+export interface AudioUploadResponse {
+  meeting_id: string;
+  filename: string;
+  segments_added: number;
+  action_items_detected: number;
+  transcript: TranscriptSegment[];
+}
+
+export interface SlackWebhookRequest {
+  webhook_url: string;
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -80,6 +122,8 @@ export interface Meeting {
   action_items: ActionItem[];
   summary?: string | null;
   agenda?: string[];
+  segment_count?: number;
+  action_item_count?: number;
 }
 
 export interface MeetingCreate {
@@ -126,6 +170,11 @@ export interface WSActionItemDetected extends ActionItem {
   type: "action_item_detected";
 }
 
+export interface WSProactiveNudge {
+  type: "proactive_nudge";
+  nudge: string;
+}
+
 export interface WSSyncHistory {
   type: "sync_history";
   segments: TranscriptSegment[];
@@ -144,7 +193,7 @@ export type WSServerMessage =
   | WSTranscriptSegment
   | WSCopilotResponse
   | WSActionItemDetected
+  | WSProactiveNudge
   | WSSyncHistory
   | WSPong
   | WSMeetingSummaryBroadcast;
-

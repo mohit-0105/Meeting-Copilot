@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -79,6 +79,28 @@ class AudioUploadResponse(BaseModel):
     action_items_detected: int
     transcript: List[TranscriptSegment]
 
+class NudgesResponse(BaseModel):
+    meeting_id: str
+    nudges: List[str]
+
+class RAGQueryRequest(BaseModel):
+    query: str
+
+class RAGSource(BaseModel):
+    meeting_id: str
+    meeting_title: str
+    timestamp: str
+    speaker: str
+    text: str
+
+class RAGQueryResponse(BaseModel):
+    query: str
+    answer: str
+    sources: List[RAGSource] = []
+
+class SlackWebhookRequest(BaseModel):
+    webhook_url: str
+
 class Meeting(BaseModel):
     id: str
     title: str
@@ -117,6 +139,10 @@ class WSCopilotResponse(BaseModel):
 
 class WSActionItemDetected(ActionItem):
     type: Literal["action_item_detected"] = "action_item_detected"
+
+class WSProactiveNudge(BaseModel):
+    type: Literal["proactive_nudge"] = "proactive_nudge"
+    nudge: str
 
 class WSSyncHistory(BaseModel):
     type: Literal["sync_history"] = "sync_history"

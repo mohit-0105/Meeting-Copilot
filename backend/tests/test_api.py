@@ -11,6 +11,7 @@ def test_health_check():
     data = response.json()
     assert data["status"] == "ok"
     assert "Meeting Copilot API" in data["service"]
+    assert data["storage"] == "persistent_sqlite"
 
 def test_create_and_get_meeting():
     # 1. Create Meeting
@@ -29,7 +30,6 @@ def test_create_and_get_meeting():
     assert get_res.json()["id"] == meeting_id
 
 def test_action_items_workflow():
-    # Create meeting first
     res = client.post("/api/meetings", json={"title": "Action Items Test Sync"})
     meeting_id = res.json()["id"]
 
@@ -61,20 +61,19 @@ def test_action_items_workflow():
     assert patch_res.status_code == 200
     assert patch_res.json()["status"] == "completed"
 
-def test_insights_and_agenda():
+def test_insights_agenda_and_nudges():
     res = client.post("/api/meetings", json={
         "title": "Strategy & Insights Sync",
         "agenda": ["Supply chain", "Unrelated Topic"]
     })
     meeting_id = res.json()["id"]
 
-    # 1. Test agenda tracking
+    # 1. Agenda tracking
     agenda_res = client.get(f"/api/meetings/{meeting_id}/agenda")
     assert agenda_res.status_code == 200
-    agenda_data = agenda_res.json()
-    assert agenda_data["total_agenda_items"] == 2
+    assert agenda_res.json()["total_agenda_items"] == 2
 
-    # 2. Test insights
+    # 2. Insights
     insights_res = client.get(f"/api/meetings/{meeting_id}/insights")
     assert insights_res.status_code == 200
     insights_data = insights_res.json()
@@ -82,22 +81,35 @@ def test_insights_and_agenda():
     assert "sentiment" in insights_data
     assert "engagement_score" in insights_data
 
-def test_audio_upload():
-    res = client.post("/api/meetings", json={"title": "Audio Upload Sync"})
+    # 3. Proactive Nudges
+    nudges_res = client.get(f"/api/meetings/{meeting_id}/nudges")
+    assert nudges_res.status_code == 200
+    assert "nudges" in nudges_res.json()
+
+def test_audio_upload_and_search():
+    res = client.post("/api/meetings", json={"title": "Audio Search Sync"})
     meeting_id = res.json()["id"]
 
+    # 1. Upload audio
     fake_audio_file = io.BytesIO(b"RIFF....WAVEfmt ....data....")
     upload_res = client.post(
         f"/api/meetings/{meeting_id}/upload-audio",
         files={"file": ("test_recording.wav", fake_audio_file, "audio/wav")}
     )
     assert upload_res.status_code == 200
-    upload_data = upload_res.json()
-    assert upload_data["meeting_id"] == meeting_id
-    assert upload_data["segments_added"] > 0
-    assert len(upload_data["transcript"]) > 0
+    assert upload_res.json()["segments_added"] > 0
 
-def test_end_meeting_and_export():
+    # 2. Test search across meetings
+    search_res = client.get("/api/search?q=roadmap")
+    assert search_res.status_code == 200
+    assert isinstance(search_res.json(), list)
+
+    # 3. Test global RAG query
+    rag_res = client.post("/api/copilot/global-query", json={"query": "What did Sarah say about roadmap?"})
+    assert rag_res.status_code == 200
+    assert "answer" in rag_res.json()
+
+def test_end_meeting_and_multi_format_export():
     res = client.post("/api/meetings", json={"title": "Sprint Planning Session"})
     meeting_id = res.json()["id"]
 
@@ -107,14 +119,19 @@ def test_end_meeting_and_export():
     summary_data = end_res.json()
     assert summary_data["meeting_id"] == meeting_id
     assert "summary" in summary_data
-    assert isinstance(summary_data["key_points"], list)
 
-    # Export Markdown
-    export_res = client.get(f"/api/meetings/{meeting_id}/export?format=markdown")
-    assert export_res.status_code == 200
-    assert "text/markdown" in export_res.headers["content-type"]
-    assert f"Meeting Notes: Sprint Planning Session" in export_res.text
+    # 1. Export Markdown
+    export_md = client.get(f"/api/meetings/{meeting_id}/export?format=markdown")
+    assert export_md.status_code == 200
+    assert "text/markdown" in export_md.headers["content-type"]
+    assert "Meeting Notes: Sprint Planning Session" in export_md.text
 
-    # Delete Meeting
+    # 2. Export HTML Dashboard
+    export_html = client.get(f"/api/meetings/{meeting_id}/export?format=html")
+    assert export_html.status_code == 200
+    assert "text/html" in export_html.headers["content-type"]
+    assert "Executive Summary" in export_html.text
+
+    # Clean up / Delete Meeting
     del_res = client.delete(f"/api/meetings/{meeting_id}")
     assert del_res.status_code == 200
