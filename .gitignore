@@ -1,0 +1,23 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache & tests
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+
+# Databases & local storage
+*.db
+*.sqlite3
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
