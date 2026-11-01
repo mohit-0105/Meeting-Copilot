@@ -29,6 +29,7 @@ export function useMeetingWebSocket({
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     if (socketRef.current?.readyState === WebSocket.OPEN) return;
@@ -83,7 +84,7 @@ export function useMeetingWebSocket({
     ws.onclose = () => {
       setIsConnected(false);
       console.log("[WS] Disconnected, attempting reconnect in 3s...");
-      reconnectTimeoutRef.current = setTimeout(connect, 3000);
+      reconnectTimeoutRef.current = setTimeout(() => connectRef.current(), 3000);
     };
 
     ws.onerror = (err) => {
@@ -91,6 +92,10 @@ export function useMeetingWebSocket({
       ws.close();
     };
   }, [baseUrl, meetingId]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     connect();
