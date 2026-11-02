@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useMeetingWebSocket } from "../hooks/useMeetingWebSocket";
-import { useAudioRecorder } from "../hooks/useAudioRecorder";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { ActionItem, MeetingSummary } from "../types/meeting";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -12,6 +12,8 @@ export default function MeetingCopilot() {
   const [queryInput, setQueryInput] = useState("");
   const [meetingSummary, setMeetingSummary] = useState<MeetingSummary | null>(null);
   const [isEnding, setIsEnding] = useState(false);
+  const [speakerName, setSpeakerName] = useState("You");
+  const [autoSpeakTTS, setAutoSpeakTTS] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement | null>(null);
 
   // WebSocket hook
@@ -24,21 +26,47 @@ export default function MeetingCopilot() {
     copilotHistory,
     isAsking,
     sendAudioChunk,
+    sendTranscriptText,
     askCopilot,
   } = useMeetingWebSocket({ meetingId: MEETING_ID });
 
-  // Audio Recorder hook
-  const { isRecording, error: micError, startRecording, stopRecording } = useAudioRecorder({
-    onChunkAvailable: (data, format) => {
-      sendAudioChunk(data, format);
+  // Web Speech API (Real Microphone Speech-to-Text with ZERO API keys)
+  const {
+    isListening,
+    isSupported: isSpeechSupported,
+    interimText,
+    error: speechError,
+    startListening,
+    stopListening,
+  } = useSpeechRecognition({
+    onTranscript: (text) => {
+      sendTranscriptText(text, speakerName);
     },
-    timeslice: 3000,
   });
+
+  // Text-to-Speech (TTS) synthesizer
+  const speakText = useCallback((text: string) => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  // Auto-speak new copilot answers if toggle is active
+  useEffect(() => {
+    if (autoSpeakTTS && copilotHistory.length > 0) {
+      const latest = copilotHistory[copilotHistory.length - 1];
+      speakText(latest.answer);
+    }
+  }, [copilotHistory, autoSpeakTTS, speakText]);
 
   // Auto-scroll transcript feed
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [segments]);
+  }, [segments, interimText]);
 
   // Handle Action Item Status Toggle
   const handleToggleAction = async (item: ActionItem) => {
@@ -76,7 +104,7 @@ export default function MeetingCopilot() {
       if (res.ok) {
         const data: MeetingSummary = await res.json();
         setMeetingSummary(data);
-        if (isRecording) stopRecording();
+        if (isListening) stopListening();
       }
     } catch (err) {
       console.error("Failed to end meeting:", err);
@@ -90,10 +118,10 @@ export default function MeetingCopilot() {
     window.open(`${API_BASE}/api/meetings/${MEETING_ID}/export?format=${format}`, "_blank");
   };
 
-  // Speaker Color Map
   const getSpeakerColor = (speaker: string) => {
+    if (speaker === "You") return "text-emerald-600";
     if (speaker.includes("Sarah")) return "text-blue-600";
-    if (speaker.includes("Dave")) return "text-emerald-600";
+    if (speaker.includes("Dave")) return "text-amber-600";
     if (speaker.includes("Emily")) return "text-purple-600";
     return "text-indigo-600";
   };
@@ -114,20 +142,30 @@ export default function MeetingCopilot() {
             <NavItem label="Dashboard" icon="📊" />
             <NavItem label="Active Meeting" icon="🎙️" active />
             <div className="ml-6 mt-2 space-y-1 border-l border-slate-700 pl-4 py-1">
-              <span className="block text-xs text-blue-400 font-medium py-1">Strategy Sync</span>
+              <span className="block text-xs text-blue-400 font-medium py-1">Live Voice Sync</span>
             </div>
             <NavItem label="Past Meetings" icon="📅" />
-            <NavItem label="Recordings" icon="📼" />
             <NavItem label="Knowledge Base" icon="🔍" />
           </nav>
         </div>
 
-        <div className="p-6 border-t border-slate-800">
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Status:</span>
+        <div className="p-6 border-t border-slate-800 space-y-3">
+          {/* Speaker identifier */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">Your Speaker Name:</label>
+            <input
+              type="text"
+              value={speakerName}
+              onChange={(e) => setSpeakerName(e.target.value)}
+              className="w-full px-2.5 py-1.5 text-xs bg-slate-800 border border-slate-700 rounded text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80">
+            <span>Server:</span>
             <span className={`flex items-center gap-1.5 font-medium ${isConnected ? "text-emerald-400" : "text-amber-400"}`}>
               <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-500" : "bg-amber-500 animate-pulse"}`} />
-              {isConnected ? "WS Connected" : "Connecting..."}
+              {isConnected ? "Connected" : "Connecting..."}
             </span>
           </div>
         </div>
@@ -141,8 +179,8 @@ export default function MeetingCopilot() {
             <h2 className="text-2xl font-bold text-slate-800">Weekly Strategy Sync</h2>
             <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
               <span className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isRecording ? "bg-red-500 animate-pulse" : "bg-slate-400"}`} />
-                {isRecording ? "Live Mic Recording" : "Mic Standby"}
+                <span className={`w-2 h-2 rounded-full ${isListening ? "bg-red-500 animate-pulse" : "bg-slate-400"}`} />
+                {isListening ? "Transcribing Your Voice Live" : "Mic Standby (Click Start to Speak)"}
               </span>
               <span>•</span>
               <span>ID: <code className="bg-slate-100 px-1 py-0.5 rounded text-xs">{MEETING_ID}</code></span>
@@ -184,10 +222,13 @@ export default function MeetingCopilot() {
 
         {/* Live Transcript Feed */}
         <div className="flex-1 overflow-y-auto p-8 space-y-5">
-          {segments.length === 0 ? (
+          {segments.length === 0 && !interimText ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3">
               <span className="text-4xl">🎙️</span>
-              <p className="text-sm">Meeting stream active. Click Start Recording to stream speech!</p>
+              <p className="text-sm font-medium">Click &quot;Start Microphone&quot; below and speak into your mic!</p>
+              <p className="text-xs text-slate-400 max-w-sm text-center">
+                Your real voice will be transcribed live in real time using the built-in browser speech engine with zero API keys required.
+              </p>
             </div>
           ) : (
             segments.map((seg) => (
@@ -202,6 +243,18 @@ export default function MeetingCopilot() {
               </div>
             ))
           )}
+
+          {/* Live Interim speech bubbles */}
+          {interimText && (
+            <div className="flex gap-4 group opacity-75 animate-pulse">
+              <div className="w-12 text-xs font-mono text-blue-500 pt-1 shrink-0">Live...</div>
+              <div>
+                <span className="font-semibold text-sm text-emerald-600">{speakerName} (speaking)</span>
+                <p className="text-slate-500 italic mt-0.5 leading-relaxed text-[15px]">{interimText}</p>
+              </div>
+            </div>
+          )}
+
           <div ref={transcriptEndRef} />
         </div>
 
@@ -209,35 +262,49 @@ export default function MeetingCopilot() {
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={isRecording ? stopRecording : startRecording}
+              onClick={isListening ? stopListening : startListening}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold shadow transition ${
-                isRecording
+                isListening
                   ? "bg-red-600 hover:bg-red-700 text-white animate-pulse"
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
               }`}
             >
-              <span>{isRecording ? "⏹️" : "🎙️"}</span>
-              <span>{isRecording ? "Stop Recording" : "Start Microphone"}</span>
+              <span>{isListening ? "⏹️" : "🎙️"}</span>
+              <span>{isListening ? "Stop Microphone" : "Start Microphone (Real Speech)"}</span>
             </button>
 
             <button
-              onClick={() => sendAudioChunk("simulated_chunk_" + Date.now())}
-              className="px-3.5 py-2.5 bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-sm font-medium transition"
+              onClick={() => sendAudioChunk("demo_mock_audio_" + Date.now())}
+              className="px-3.5 py-2.5 bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium transition"
+              title="Runs mock dialogue rotation for testing without microphone"
             >
-              Simulate Speech Chunk
+              Run Mock Sample Dialogue
             </button>
           </div>
 
-          {micError && <span className="text-xs text-red-600 font-medium">{micError}</span>}
+          {speechError && (
+            <span className="text-xs text-red-600 font-medium max-w-xs">{speechError}</span>
+          )}
         </div>
       </main>
 
       {/* 3. Right Panel (AI Copilot & Insights) */}
       <aside className="w-96 bg-slate-50 flex flex-col shrink-0">
-        <div className="h-20 border-b border-slate-200 bg-slate-50 flex items-center px-6 shrink-0">
+        <div className="h-20 border-b border-slate-200 bg-slate-50 flex items-center justify-between px-6 shrink-0">
           <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            ✨ AI Copilot Insights
+            ✨ AI Copilot
           </h3>
+
+          {/* Text to Speech Toggle */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer" title="Auto-speak copilot responses with audio voice">
+            <input
+              type="checkbox"
+              checked={autoSpeakTTS}
+              onChange={(e) => setAutoSpeakTTS(e.target.checked)}
+              className="rounded text-blue-600"
+            />
+            <span>🔊 Auto-TTS</span>
+          </label>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -250,7 +317,7 @@ export default function MeetingCopilot() {
             </div>
 
             {actionItems.length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No action items detected yet.</p>
+              <p className="text-xs text-slate-400 italic">No action items detected yet. Speak words like &quot;I will schedule...&quot; or &quot;need to review...&quot;</p>
             ) : (
               <div className="space-y-2.5">
                 {actionItems.map((item) => (
@@ -288,21 +355,28 @@ export default function MeetingCopilot() {
             </h4>
             <div className="space-y-4">
               {copilotHistory.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">Ask Copilot any question about this meeting below.</p>
+                <p className="text-xs text-slate-400 italic">Ask Copilot any question about what has been said in the meeting.</p>
               ) : (
                 copilotHistory.map((item, idx) => (
                   <div key={idx} className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2">
                     <p className="text-xs font-semibold text-slate-500">Q: {item.query}</p>
                     <p className="text-sm text-slate-800 leading-relaxed">{item.answer}</p>
-                    {item.references && item.references.length > 0 && (
-                      <div className="flex gap-1.5 pt-1">
-                        {item.references.map((ref, rIdx) => (
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex gap-1.5">
+                        {item.references && item.references.map((ref, rIdx) => (
                           <span key={rIdx} className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-mono">
                             ⏱️ {ref}
                           </span>
                         ))}
                       </div>
-                    )}
+                      <button
+                        onClick={() => speakText(item.answer)}
+                        className="text-xs text-slate-400 hover:text-blue-600 flex items-center gap-1 transition"
+                        title="Read aloud"
+                      >
+                        🔊 Speak
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

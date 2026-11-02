@@ -87,7 +87,43 @@ async def handle_meeting_websocket(websocket: WebSocket, meeting_id: str):
             if msg_type == "ping":
                 await websocket.send_text(WSPong().model_dump_json())
 
-            # 2. Audio Chunk Streaming
+            # 2. Real Live Speech-to-Text from Browser Microphone (Zero API Key needed)
+            elif msg_type == "transcript_text":
+                text = msg.get("text", "").strip()
+                if text:
+                    chunk_counter += 1
+                    speaker = msg.get("speaker", "You")
+                    minutes = (chunk_counter * 10) // 60
+                    seconds = (chunk_counter * 10) % 60
+                    derived_timestamp = msg.get("timestamp") or f"{minutes:02d}:{seconds:02d}"
+
+                    segment = TranscriptSegment(
+                        id=f"seg_{uuid.uuid4().hex[:6]}",
+                        speaker=speaker,
+                        text=text,
+                        timestamp=derived_timestamp,
+                        is_final=True
+                    )
+
+                    seg_dict = segment.model_dump()
+                    manager.meeting_history.setdefault(meeting_id, []).append(seg_dict)
+                    await db.save_segment(meeting_id, seg_dict)
+
+                    ws_segment = WSTranscriptSegment(**seg_dict)
+                    await manager.broadcast_to_meeting(meeting_id, ws_segment.model_dump())
+
+                    action_item = await copilot_service.detect_action_item(
+                        text=segment.text,
+                        speaker=segment.speaker
+                    )
+                    if action_item:
+                        act_dict = action_item.model_dump()
+                        manager.meeting_actions.setdefault(meeting_id, []).append(act_dict)
+                        await db.save_action_item(meeting_id, act_dict)
+                        ws_action = WSActionItemDetected(**act_dict)
+                        await manager.broadcast_to_meeting(meeting_id, ws_action.model_dump())
+
+            # 3. Audio Chunk Streaming
             elif msg_type == "audio_chunk":
                 chunk_counter += 1
                 audio_data = msg.get("data", "")

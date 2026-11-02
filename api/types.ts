@@ -143,6 +143,13 @@ export interface WSAudioChunk {
   timestamp?: string;
 }
 
+export interface WSTranscriptText {
+  type: "transcript_text";
+  text: string;
+  speaker?: string;
+  timestamp?: string;
+}
+
 export interface WSCopilotQuery {
   type: "copilot_query";
   query: string;
@@ -152,7 +159,7 @@ export interface WSPing {
   type: "ping";
 }
 
-export type WSClientMessage = WSAudioChunk | WSCopilotQuery | WSPing;
+export type WSClientMessage = WSAudioChunk | WSTranscriptText | WSCopilotQuery | WSPing;
 
 // Server -> Client
 export interface WSTranscriptSegment extends TranscriptSegment {
