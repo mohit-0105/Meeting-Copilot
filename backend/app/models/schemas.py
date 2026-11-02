@@ -121,6 +121,12 @@ class WSAudioChunk(BaseModel):
     format: str = "webm_opus"
     timestamp: Optional[str] = None
 
+class WSTranscriptText(BaseModel):
+    type: Literal["transcript_text"] = "transcript_text"
+    text: str
+    speaker: str = "You"
+    timestamp: Optional[str] = None
+
 class WSCopilotQuery(BaseModel):
     type: Literal["copilot_query"] = "copilot_query"
     query: str

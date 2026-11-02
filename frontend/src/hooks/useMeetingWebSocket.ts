@@ -117,6 +117,18 @@ export function useMeetingWebSocket({
     }
   }, []);
 
+  const sendTranscriptText = useCallback((text: string, speaker = "You") => {
+    if (socketRef.current?.readyState === WebSocket.OPEN && text.trim()) {
+      socketRef.current.send(
+        JSON.stringify({
+          type: "transcript_text",
+          text: text.trim(),
+          speaker,
+        })
+      );
+    }
+  }, []);
+
   const askCopilot = useCallback((query: string) => {
     if (socketRef.current?.readyState === WebSocket.OPEN && query.trim()) {
       setIsAsking(true);
@@ -138,6 +150,8 @@ export function useMeetingWebSocket({
     copilotHistory,
     isAsking,
     sendAudioChunk,
+    sendTranscriptText,
     askCopilot,
   };
 }
+
